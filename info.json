@@ -1,0 +1,9 @@
+{
+  "name": "fast-start-2",
+  "version": "0.2.4",
+  "title": "Fast Start 2",
+  "author": "doily7332",
+  "description": "Gives the player a balanced fast-start kit on first join. Includes personal bots, power armor, exoskeletons, red belts, electric miners, blue assemblers, and a radar scan of the starting area. Designed for Space Exploration runs but works in vanilla too. All features and quantities are configurable.",
+  "factorio_version": "2.0",
+  "dependencies": ["base", "? space-exploration"]
+}

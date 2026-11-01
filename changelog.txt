@@ -1,0 +1,70 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.2.4
+Date: 20. 03. 2026
+  Bugfixes:
+    - Fixed incorrect item name for burner turbine generator (was se-burner-turbine,
+      correct name is burner-turbine from AAI Industry which is bundled with the SE modpack).
+---------------------------------------------------------------------------------------------------
+Version: 0.2.3
+Date: 19. 03. 2026
+  Features:
+    - Added 1 SE burner turbine generator when Space Exploration is loaded.
+      SE makes offshore pumps require electricity, creating a bootstrap deadlock
+      with steam power. The burner turbine requires no water and breaks the cycle.
+      Silently skipped on vanilla. Tear it down once the steam plant is running.
+---------------------------------------------------------------------------------------------------
+Version: 0.2.2
+Date: 19. 03. 2026
+  Changes:
+    - Changed default armor to power-armor (mk1) for vanilla compatibility.
+      mk1 fits a fission reactor, 1 roboport, and 1 exoskeleton within its 7x7 grid.
+      SE players can switch to mk2 in settings for a larger grid.
+    - Reduced default roboport count from 2 to 1 to match mk1 grid constraints.
+    - Reduced default exoskeleton count from 2 to 1 to match mk1 grid constraints.
+    - Reduced default construction bot count from 50 to 26 to match single roboport capacity.
+      Extra bots beyond roboport capacity sit unused in inventory.
+      SE players using mk2 with 2 roboports can set this to 52.
+---------------------------------------------------------------------------------------------------
+Version: 0.2.1
+Date: 19. 03. 2026
+  Features:
+    - Added electric labs (default: 8) to avoid burner lab coal micromanagement at game start.
+    - Increased default belt quantity from 200 to 500 to better cover multi-patch layouts and a main bus.
+    - Increased default underground belt quantity from 40 to 80.
+    - Increased default splitter quantity from 20 to 40.
+    - Reduced default blue assembler quantity from 20 to 12 for a more balanced start.
+    - Reduced default fast inserter quantity from 100 to 60.
+    - Raised all setting maximums to eliminate red inputs for high quantity preferences.
+  Bugfixes:
+    - Fixed thumbnail not displaying in-game due to incorrect dimensions (was 1024x1024, now 144x144).
+---------------------------------------------------------------------------------------------------
+Version: 0.2.0
+Date: 17. 03. 2026
+  Bugfixes:
+    - Fixed kit not being delivered when mod is added to an existing save.
+    - Added on_configuration_changed handler to deliver kit to all current players on mod install.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.9
+Date: 17. 03. 2026
+  Bugfixes:
+    - Fixed changelog format to display correctly in-game.
+    - Fixed missing 0.1.8 changelog entry for thumbnail addition.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.8
+Date: 17. 03. 2026
+  Features:
+    - Added thumbnail.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.7
+Date: 17. 03. 2026
+  Features:
+    - Initial working release.
+    - Starting inventory: red belts, pipes, power infrastructure, miners, furnaces, assemblers, fast inserters.
+    - Radar scan on first join with configurable radius (default 448 tiles).
+    - Power armor (mk1 or mk2 configurable) with fission reactor, personal roboports, and exoskeletons.
+    - Construction bots delivered to inventory on first join.
+    - All three feature groups independently toggleable via Mod Settings.
+    - All item quantities individually configurable via Mod Settings.
+    - Persistent per-player tracking prevents kit from being given more than once.
+    - Multiplayer and dedicated server compatible.
+---------------------------------------------------------------------------------------------------
