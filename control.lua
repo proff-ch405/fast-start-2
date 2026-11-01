@@ -74,9 +74,12 @@ end
 -- roughly 2x the diameter of a standard radar's scan area (a radar covers ~7
 -- chunks / 224 tiles radius at full scan).
 --
--- We call request_to_generate_chunks + force_generate_chunk_requests first to
--- ensure the chunks actually exist before we try to chart them — charting an
--- ungenerated chunk is a no-op.
+-- GENERATION HAPPENS IN THE BACKGROUND:
+--   We deliberately do NOT call surface.force_generate_chunk_requests(). That
+--   blocks the whole game until every chunk exists — about 840 chunks at the
+--   default radius and ~16,000 at the maximum — freezing every player in
+--   multiplayer. Instead we queue the chunks for normal background generation
+--   and let chart() fill in the map as they arrive.
 local function do_radar_scan(player, character)
     if not s("enable-radar-scan") then return end
 
@@ -84,20 +87,18 @@ local function do_radar_scan(player, character)
     local surface = character.surface
     local pos = character.position
 
-    -- Chunks are 32x32 tiles. We need to generate all chunks within the radius
-    -- before charting, otherwise the map stays black even after the chart call.
-    local chunk_radius = math.ceil(radius / 32)
-    surface.request_to_generate_chunks(pos, chunk_radius)
-    surface.force_generate_chunk_requests()
+    -- Chunks are 32x32 tiles; request_to_generate_chunks takes a chunk radius.
+    surface.request_to_generate_chunks(pos, math.ceil(radius / 32))
 
     -- chart() takes a bounding box in tile coordinates, not chunk coordinates.
-    -- This reveals the full square area to the player's force on the map.
+    -- It refreshes the chart for the area and creates it for any part that
+    -- hasn't been charted yet, without blocking on generation.
     player.force.chart(surface, {
         { pos.x - radius, pos.y - radius },
         { pos.x + radius, pos.y + radius }
     })
 
-    player.print("[SE Fast Start] Radar scan complete - " .. radius .. " tile radius revealed.")
+    player.print("[Fast Start 2] Radar scan started - revealing a " .. radius .. " tile radius.")
 end
 
 
