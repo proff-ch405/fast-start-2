@@ -77,12 +77,12 @@ end
 -- We call request_to_generate_chunks + force_generate_chunk_requests first to
 -- ensure the chunks actually exist before we try to chart them — charting an
 -- ungenerated chunk is a no-op.
-local function do_radar_scan(player)
+local function do_radar_scan(player, character)
     if not s("enable-radar-scan") then return end
 
     local radius = s("radar-radius")
-    local surface = player.surface
-    local pos = player.position
+    local surface = character.surface
+    local pos = character.position
 
     -- Chunks are 32x32 tiles. We need to generate all chunks within the radius
     -- before charting, otherwise the map stays black even after the chart call.
@@ -115,7 +115,7 @@ end
 -- Note: raw resources (iron, copper, coal, etc.) are intentionally excluded.
 -- The point of this mod is to skip the repetitive early building grind, not
 -- to skip resource gathering entirely — that's still the fun part.
-local function do_inventory(player)
+local function do_inventory(player, character)
     if not s("enable-inventory") then return end
 
     local items = {
@@ -158,7 +158,7 @@ local function do_inventory(player)
     }
 
     for _, item in ipairs(items) do
-        give_item(player.character, item.name, item.count)
+        give_item(character, item.name, item.count)
     end
 
     player.print("[SE Fast Start] Starting inventory delivered.")
@@ -201,11 +201,8 @@ end
 --   Bots go into the main inventory, not the armor grid. Once the personal
 --   roboport equipment is active, Factorio automatically pulls bots from the
 --   player's inventory into the roboport's internal buffer as needed.
-local function do_bots(player)
+local function do_bots(player, character)
     if not s("enable-bots") then return end
-
-    local inv = player.get_main_inventory()
-    if not inv then return end
 
     local bot_count  = s("count-construction-bot")
     local robo_count = s("count-roboport")
@@ -214,7 +211,7 @@ local function do_bots(player)
 
     -- Give construction bots to main inventory. The personal roboport equipment
     -- will automatically pull bots from here once it's active.
-    give_item(player.character, "construction-robot", bot_count)
+    give_item(character, "construction-robot", bot_count)
 
     -- Safety check: if the chosen armor somehow doesn't exist in this mod
     -- configuration (e.g. a mod removed it), fall back gracefully rather
@@ -230,7 +227,7 @@ local function do_bots(player)
 
     -- Clear the armor slot before inserting — handles edge cases where the
     -- player already has armor equipped from another mod's starter kit.
-    local armor_inv = player.get_inventory(defines.inventory.character_armor)
+    local armor_inv = character.get_inventory(defines.inventory.character_armor)
     if not armor_inv then return end
 
     armor_inv.clear()
@@ -290,32 +287,30 @@ end
 
 -- Orchestrates all three feature groups in a sensible order:
 --   1. Radar scan first so the map is revealed before the player moves
---   2. Inventory second so buildings are available immediately
---   3. Bots/armor last since it modifies the character's equipment state
+--   2. Bots/armor second, because equipping power armor adds inventory slots
+--   3. Inventory last so the buildings have the most room to land in
 --
--- Guards against edge cases where the event fires before the character exists
--- (can happen briefly in certain multiplayer scenarios).
+-- WHICH CHARACTER?
+--   While the freeplay intro cutscene is playing, player.character is nil and
+--   the real character is parked in player.cutscene_character until the
+--   cutscene ends. We give the kit straight to whichever one exists, so the
+--   kit arrives on creation whether the player watches the intro, skips it,
+--   or has it disabled. Everything else (inventories, position, surface) is
+--   read from that character entity rather than from the player.
+--
+-- Returns false if there is no character at all yet (e.g. a player who has
+-- not spawned), so the caller leaves the "given" flag unset and retries later.
 local function give_fast_start(player)
-    if not player then
-        log("[fast-start-2] give_fast_start: player is nil, aborting")
-        return false
-    end
-    if not player.valid then
-        log("[fast-start-2] give_fast_start: player not valid, aborting")
-        return false
-    end
-    if not player.character then
-        -- on_player_created can fire before the character is spawned in Factorio 2.0.
-        -- Returning false tells the caller not to mark this player as given yet,
-        -- so on_player_joined_game can try again once the character exists.
-        log("[fast-start-2] give_fast_start: player.character is nil, deferring")
+    local character = player.character or player.cutscene_character
+    if not (character and character.valid) then
+        log("[fast-start-2] give_fast_start: no character yet for " .. player.name .. ", deferring")
         return false
     end
 
     log("[fast-start-2] give_fast_start: starting for player " .. player.name)
-    do_radar_scan(player)
-    do_inventory(player)
-    do_bots(player)
+    do_radar_scan(player, character)
+    do_bots(player, character)
+    do_inventory(player, character)
     log("[fast-start-2] give_fast_start: complete for player " .. player.name)
     return true
 end
@@ -325,15 +320,19 @@ end
 -- EVENT HANDLERS
 -- =============================================================================
 --
--- WHY TWO EVENTS?
---   on_player_created  — fires when a brand new player slot is created
---                        (singleplayer start, or first ever join in MP)
---   on_player_joined_game — fires every time any player connects, including
---                        returning players in multiplayer
+-- WHICH EVENTS?
+--   on_player_created     — fires when a brand new player is created
+--                           (singleplayer start, or first ever join in MP).
+--                           This is where the kit is normally delivered.
+--   on_player_joined_game — fires every time a player connects. Retries for
+--                           anyone who had no character when they were created.
+--   on_cutscene_finished / on_cutscene_cancelled — the character is guaranteed
+--                           to be back on the player by now, so these are a
+--                           last safety net for scenarios that create the
+--                           character late.
 --
---   We need both because on_player_created alone won't fire for a returning
---   multiplayer player, and on_player_joined_game alone won't fire in some
---   singleplayer edge cases.
+--   All of them go through try_give_fast_start(), which checks the persistent
+--   "already given" flag, so it's harmless for several of them to fire.
 --
 -- WHY PLAYER_INDEX AND NOT THE PLAYER OBJECT?
 --   Factorio player *objects* are Lua userdata — live references that are
@@ -351,37 +350,29 @@ end
 --   flag anywhere other than `storage` would mean it resets on every reload.
 --   Renamed from `global` to `storage` in Factorio 2.0.
 
-local function on_player_init(event)
-    -- Defensive init: on_init sets this up, but guard here too in case the mod
-    -- is added to an existing save (on_init won't re-run in that case).
+-- Gives the kit once per player. The flag is only set if the kit was actually
+-- delivered, so a player with no character yet is retried by the next event.
+local function try_give_fast_start(player)
+    if not (player and player.valid) then return end
+
+    -- Defensive init: on_init/on_configuration_changed set this up, but guard
+    -- here too so an event can never index a missing table.
     storage.fast_start_given = storage.fast_start_given or {}
+    if storage.fast_start_given[player.index] then return end
 
-    local player = game.players[event.player_index]
-    if not player then
-        log("[fast-start-2] on_player_init: no player found for index " .. event.player_index)
-        return
-    end
-
-    log("[fast-start-2] on_player_init: fired for " .. player.name .. " (index " .. event.player_index .. "), already_given=" .. tostring(storage.fast_start_given[event.player_index]))
-
-    if not storage.fast_start_given[event.player_index] then
-        local success = give_fast_start(player)
-        -- Only mark as given if the kit was actually delivered. If the character
-        -- wasn't ready yet (returns false), leave the flag unset so the next
-        -- event firing (on_player_joined_game) can try again.
-        if success then
-            storage.fast_start_given[event.player_index] = true
-        end
+    if give_fast_start(player) then
+        storage.fast_start_given[player.index] = true
     end
 end
 
-script.on_event(defines.events.on_player_created,     on_player_init)
-script.on_event(defines.events.on_player_joined_game, on_player_init)
--- on_player_spawned does not exist in Factorio 2.0. on_player_created and
--- on_player_joined_game both fire before the character exists due to the intro
--- cutscene. on_cutscene_cancelled fires when the cutscene ends, which is the
--- first moment player.character is guaranteed to be valid.
-script.on_event(defines.events.on_cutscene_cancelled, on_player_init)
+local function on_player_event(event)
+    try_give_fast_start(game.get_player(event.player_index))
+end
+
+script.on_event(defines.events.on_player_created,     on_player_event)
+script.on_event(defines.events.on_player_joined_game, on_player_event)
+script.on_event(defines.events.on_cutscene_finished,  on_player_event)
+script.on_event(defines.events.on_cutscene_cancelled, on_player_event)
 
 -- on_init runs exactly once when the mod is first loaded into a brand new save.
 -- We initialise the storage table here so it's always valid when events fire.
@@ -389,23 +380,14 @@ script.on_init(function()
     storage.fast_start_given = {}
 end)
 
--- on_configuration_changed fires when a mod is added to an existing save.
--- on_init does NOT run in this case, so we need to initialise storage here too
--- and then attempt to deliver the kit to all currently connected players.
--- The character may or may not exist at this point depending on game state,
--- but give_fast_start() will return false gracefully if it doesn't — the player
--- will then receive their kit on the next on_cutscene_cancelled or on_player_joined_game.
+-- on_configuration_changed fires when this mod is added to an existing save
+-- (on_init does NOT run in that case), and also whenever the game or any mod
+-- is updated. Players already flagged as given are skipped, so updates never
+-- hand out a second kit; only players who never got one receive it here.
 script.on_configuration_changed(function()
     storage.fast_start_given = storage.fast_start_given or {}
 
     for _, player in pairs(game.players) do
-        if player.valid and not storage.fast_start_given[player.index] then
-            log("[fast-start-2] on_configuration_changed: attempting kit delivery for " .. player.name)
-            if give_fast_start(player) then
-                storage.fast_start_given[player.index] = true
-            else
-                log("[fast-start-2] on_configuration_changed: character not ready for " .. player.name .. ", will retry on next join")
-            end
-        end
+        try_give_fast_start(player)
     end
 end)
