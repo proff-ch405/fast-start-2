@@ -30,6 +30,39 @@ end
 
 
 -- =============================================================================
+-- ITEM DELIVERY HELPER
+-- =============================================================================
+
+-- Puts `count` of an item into the character's main inventory. Anything that
+-- doesn't fit is spilled on the ground at the character's feet (flagged so the
+-- player picks it up automatically by walking over it) rather than lost.
+--
+-- Items that don't exist in the current mod set (e.g. removed or renamed by an
+-- overhaul mod) are skipped with a log line instead of crashing the game.
+--
+-- Returns the number of items actually given (inserted + spilled).
+local function give_item(character, name, count)
+    if count <= 0 then return 0 end
+    if not prototypes.item[name] then
+        log("[fast-start-2] give_item: item '" .. name .. "' does not exist, skipping")
+        return 0
+    end
+
+    local inv = character.get_main_inventory()
+    local inserted = inv and inv.insert({ name = name, count = count }) or 0
+
+    if inserted < count then
+        character.surface.spill_item_stack{
+            position      = character.position,
+            stack         = { name = name, count = count - inserted },
+            enable_looted = true,
+        }
+    end
+    return count
+end
+
+
+-- =============================================================================
 -- RADAR SCAN
 -- =============================================================================
 
@@ -77,17 +110,13 @@ end
 -- configurable in Mod Settings so players can tune the kit to taste.
 --
 -- If the player's inventory is full (unlikely at spawn but possible with other
--- mods), overflow items are spilled onto the ground at their feet rather than
--- silently lost.
+-- mods), give_item() spills the overflow at their feet rather than losing it.
 --
 -- Note: raw resources (iron, copper, coal, etc.) are intentionally excluded.
 -- The point of this mod is to skip the repetitive early building grind, not
 -- to skip resource gathering entirely — that's still the fun part.
 local function do_inventory(player)
     if not s("enable-inventory") then return end
-
-    local inv = player.get_main_inventory()
-    if not inv then return end
 
     local items = {
         -- BELTS — red belts are the sweet spot: cheap to build toward,
@@ -119,29 +148,17 @@ local function do_inventory(player)
         { name = "assembling-machine-2",  count = s("count-assembler")        },
         { name = "fast-inserter",         count = s("count-fast-inserter")    },
         { name = "lab",                   count = s("count-lab")              },
-        -- SPACE EXPLORATION BOOTSTRAP — SE (via AAI Industry) makes offshore pumps
-        -- require electricity, creating a chicken-and-egg problem with steam power.
-        -- The burner turbine generator requires no water and breaks the cycle.
-        -- Give one to bootstrap the initial power setup, then tear it down once
-        -- the steam plant is running.
-        -- Guard with prototype check so this is silently skipped on vanilla.
-        -- Item is from AAI Industry (bundled with SE modpack), internal name: "burner-turbine"
-        prototypes.item["burner-turbine"] and
-        { name = "burner-turbine", count = 1 } or nil,
+        -- AAI INDUSTRY BOOTSTRAP — AAI Industry (required by Space Exploration,
+        -- but also usable on its own) makes offshore pumps require electricity,
+        -- creating a chicken-and-egg problem with steam power. The burner
+        -- turbine generator needs no water and breaks the cycle. Give one to
+        -- bootstrap the initial power setup, then tear it down once the steam
+        -- plant is running. give_item() silently skips it when AAI isn't loaded.
+        { name = "burner-turbine",        count = 1                           },
     }
 
-    for _, item in pairs(items) do
-        if item and item.count > 0 then
-            local inserted = inv.insert(item)
-            -- Spill any overflow rather than silently losing items
-            if inserted < item.count then
-                -- Note: enable_looted parameter was removed in Factorio 2.0
-                player.surface.spill_item_stack(
-                    player.position,
-                    { name = item.name, count = item.count - inserted }
-                )
-            end
-        end
+    for _, item in ipairs(items) do
+        give_item(player.character, item.name, item.count)
     end
 
     player.print("[SE Fast Start] Starting inventory delivered.")
@@ -197,16 +214,7 @@ local function do_bots(player)
 
     -- Give construction bots to main inventory. The personal roboport equipment
     -- will automatically pull bots from here once it's active.
-    if bot_count > 0 then
-        local inserted = inv.insert({ name = "construction-robot", count = bot_count })
-        if inserted < bot_count then
-            -- Note: enable_looted parameter was removed in Factorio 2.0
-            player.surface.spill_item_stack(
-                player.position,
-                { name = "construction-robot", count = bot_count - inserted }
-            )
-        end
-    end
+    give_item(player.character, "construction-robot", bot_count)
 
     -- Safety check: if the chosen armor somehow doesn't exist in this mod
     -- configuration (e.g. a mod removed it), fall back gracefully rather
