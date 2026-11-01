@@ -206,10 +206,10 @@ data:extend({
     -- ============================================================
 
     -- Armor tier choice exists because power-armor-mk2 has a much larger equipment
-    -- grid (10x10 vs 7x7) and is needed to fit a fusion reactor + 2 roboports +
-    -- 2 exoskeletons comfortably. However, in a vanilla game (no Space Exploration)
-    -- mk2 is a very late-game research unlock, so forcing it on a vanilla player
-    -- would be jarring. SE players should use mk2; vanilla players should use mk1.
+    -- grid (10x10 vs mk1's 6x8). The default kit (2 fission reactors, 1 roboport,
+    -- 1 exoskeleton) exactly fits mk1; mk2 fits 2 roboports + 2 exoskeletons too.
+    -- mk1 is the default because mk2 is a late research unlock and would feel
+    -- out of place this early in most runs.
     --
     -- We intentionally do NOT auto-detect SE here because checking for mod presence
     -- in the settings stage is fragile. Just let the player choose.
@@ -220,6 +220,18 @@ data:extend({
         default_value = "power-armor",
         allowed_values = { "power-armor", "power-armor-mk2" },
         order = "g-00",
+    },
+    -- Two reactors by default: one portable fission reactor makes 750 kW in
+    -- vanilla but only 500 kW under Space Exploration, which isn't enough to
+    -- run an exoskeleton and recharge bots at full speed.
+    {
+        type = "int-setting",
+        name = "sefs-count-reactor",
+        setting_type = "runtime-global",
+        default_value = 2,
+        minimum_value = 0,
+        maximum_value = 4,
+        order = "g-005",
     },
     {
         type = "int-setting",

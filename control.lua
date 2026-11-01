@@ -169,115 +169,130 @@ end
 -- BOTS, ARMOR & EQUIPMENT
 -- =============================================================================
 
--- Equips the player with power armor and fills the armor grid with a fusion
--- reactor, personal roboports, and exoskeletons, then gives construction bots.
+-- Equips the player with power armor and fills the armor grid with portable
+-- fission reactors, personal roboports, and exoskeletons, then gives
+-- construction bots.
 --
--- ARMOR TIER:
---   The player can choose between power-armor (mk1, 7x7 grid) and
---   power-armor-mk2 (10x10 grid) in Mod Settings.
+-- ARMOR TIER & GRID SPACE:
+--   The player can choose between power-armor (mk1, 6x8 grid) and
+--   power-armor-mk2 (10x10 grid) in Mod Settings. Equipment sizes:
+--     fission reactor 4x4, personal roboport 2x2, exoskeleton 2x4.
+--   The default kit (2 reactors, 1 roboport, 1 exoskeleton) fits mk1: the two
+--   reactors fill a 4x8 strip, leaving a 2x8 column for the roboport and exo.
+--   mk2 fits 2 reactors + 2 roboports + 2 exoskeletons with room to spare.
 --
---   We default to mk2 because Space Exploration (the primary target mod for
---   this fast-start) makes mk2 available much earlier than vanilla, and the
---   larger grid comfortably fits: 1 fusion reactor + 2 roboports + 2 exos.
---   On a 7x7 mk1 grid, fitting all of that is tight and may fail silently.
---
---   Vanilla players without SE should switch the setting to mk1, since mk2
---   is a very late research unlock in vanilla and would feel out of place.
---
--- POWER SOURCE — FUSION REACTOR:
+-- POWER SOURCE — PORTABLE FISSION REACTOR:
 --   Personal roboports and exoskeletons both draw from the armor's equipment
---   grid power supply. Without a power source the roboports won't deploy bots
---   and exoskeletons won't boost movement speed.
+--   grid power supply. Without power the roboports won't deploy bots and
+--   exoskeletons won't boost movement speed.
 --
---   We use a fusion reactor (infinite power, no fuel needed) rather than
---   batteries or solar panels because:
---     - Batteries deplete and leave bots stranded mid-construction
---     - Solar panels produce nothing underground or at night
---     - A fusion reactor "just works" for the entire run with zero upkeep
---   This is intentional: the goal is to remove friction, not to make the
---   player manage personal power as another early-game chore.
+--   A fission reactor needs no fuel, unlike batteries (deplete and strand bots
+--   mid-construction) or solar panels (nothing at night). One reactor makes
+--   750 kW in vanilla but only 500 kW under Space Exploration, while one
+--   exoskeleton alone uses 200 kW and a roboport recharging bots can draw much
+--   more. Two reactors keep everything running at full speed.
+--
+--   (The newer "fusion-reactor-equipment" is a late-game Space Age unlock and
+--   not appropriate for a fast-start kit.)
+--
+-- EXISTING ARMOR:
+--   If the player is already wearing armor (e.g. the mod was added to an
+--   existing save), it is moved into their main inventory with all of its
+--   equipment, never deleted.
 --
 -- CONSTRUCTION BOTS:
 --   Bots go into the main inventory, not the armor grid. Once the personal
---   roboport equipment is active, Factorio automatically pulls bots from the
---   player's inventory into the roboport's internal buffer as needed.
+--   roboport equipment is active, Factorio automatically deploys bots from the
+--   player's inventory as needed.
+
+-- Puts up to `count` of an equipment into the grid and returns how many fit.
+-- grid.put() returns nil when there's no room left for that shape.
+local function place_equipment(grid, name, count)
+    if count <= 0 then return 0 end
+    if not prototypes.equipment[name] then
+        log("[fast-start-2] place_equipment: equipment '" .. name .. "' does not exist, skipping")
+        return 0
+    end
+
+    local placed = 0
+    for _ = 1, count do
+        if not grid.put({ name = name }) then break end
+        placed = placed + 1
+    end
+    return placed
+end
+
 local function do_bots(player, character)
     if not s("enable-bots") then return end
 
-    local bot_count  = s("count-construction-bot")
-    local robo_count = s("count-roboport")
-    local exo_count  = s("count-exoskeleton")
-    local armor_name = s("armor-tier")  -- "power-armor" or "power-armor-mk2"
+    local bot_count     = s("count-construction-bot")
+    local reactor_count = s("count-reactor")
+    local robo_count    = s("count-roboport")
+    local exo_count     = s("count-exoskeleton")
+    local armor_name    = s("armor-tier")  -- "power-armor" or "power-armor-mk2"
 
-    -- Give construction bots to main inventory. The personal roboport equipment
-    -- will automatically pull bots from here once it's active.
-    give_item(character, "construction-robot", bot_count)
+    local armor_inv = character.get_inventory(defines.inventory.character_armor)
+    local main_inv  = character.get_main_inventory()
 
-    -- Safety check: if the chosen armor somehow doesn't exist in this mod
-    -- configuration (e.g. a mod removed it), fall back gracefully rather
-    -- than throwing a hard error.
-    -- Note: game.item_prototypes was moved to prototypes.item in Factorio 2.0
     if not prototypes.item[armor_name] then
         player.print(
-            "[SE Fast Start] Warning: armor '" .. armor_name ..
-            "' not found. Check your armor tier setting. Bots/equipment skipped."
+            "[Fast Start 2] Warning: armor '" .. armor_name ..
+            "' not found. Check your armor tier setting. Armor skipped."
         )
-        return
-    end
+    elseif armor_inv and main_inv then
+        -- Build the new armor in a free main-inventory slot, then swap it into
+        -- the armor slot. Whatever the player was wearing ends up in that
+        -- inventory slot instead. If the inventory is completely full and the
+        -- player already wears armor, skip rather than risk deleting it.
+        local was_wearing = armor_inv[1].valid_for_read
+        local new_stack = main_inv.find_empty_stack()
+        local built_in_armor_slot = false
+        if not new_stack and not was_wearing then
+            new_stack = armor_inv[1]
+            built_in_armor_slot = true
+        end
 
-    -- Clear the armor slot before inserting — handles edge cases where the
-    -- player already has armor equipped from another mod's starter kit.
-    local armor_inv = character.get_inventory(defines.inventory.character_armor)
-    if not armor_inv then return end
+        if not new_stack then
+            player.print("[Fast Start 2] Warning: inventory full, so your current armor was kept. Armor skipped.")
+        else
+            new_stack.set_stack({ name = armor_name, count = 1 })
+            local grid = new_stack.grid
+            if not grid then
+                player.print("[Fast Start 2] Warning: armor '" .. armor_name .. "' has no equipment grid. Equipment skipped.")
+            else
+                -- Reactors first (largest, and everything else needs power),
+                -- exoskeletons last since they matter least if space runs out.
+                local reactors = place_equipment(grid, "fission-reactor-equipment", reactor_count)
+                local robos    = place_equipment(grid, "personal-roboport-equipment", robo_count)
+                local exos     = place_equipment(grid, "exoskeleton-equipment", exo_count)
 
-    armor_inv.clear()
-    armor_inv.insert({ name = armor_name, count = 1 })
+                player.print(
+                    "[Fast Start 2] " .. armor_name .. " equipped: " ..
+                    reactors .. " fission reactor(s), " .. robos .. " roboport(s), " ..
+                    exos .. " exoskeleton(s)."
+                )
+                if reactors < reactor_count or robos < robo_count or exos < exo_count then
+                    player.print(
+                        "[Fast Start 2] Warning: not all equipment fit in the armor grid. " ..
+                        "Switch to power-armor-mk2 or lower the equipment counts."
+                    )
+                end
+            end
 
-    -- Retrieve the equipment grid from the newly inserted armor stack.
-    -- We validate each step because if any layer is nil (e.g. the armor item
-    -- has no grid defined) we want a clear warning rather than a Lua error.
-    local armor_stack = armor_inv[1]
-    if not (armor_stack and armor_stack.valid_for_read and armor_stack.grid) then
-        player.print("[SE Fast Start] Warning: could not access armor grid. Equipment skipped.")
-        return
-    end
-
-    local grid = armor_stack.grid
-
-    -- Place fission reactor first — provides personal power for roboports and
-    -- exoskeletons. Note: in Factorio 2.0 the old "fusion-reactor-equipment"
-    -- was renamed to "fission-reactor-equipment". The new fusion reactor is a
-    -- late-game DLC unlock and not appropriate for a fast-start kit.
-    grid.put({ name = "fission-reactor-equipment" })
-
-    -- Place personal roboports. grid.put() returns nil if there's no room,
-    -- so we warn and break rather than silently placing fewer than expected.
-    for i = 1, robo_count do
-        if not grid.put({ name = "personal-roboport-equipment" }) then
-            player.print(
-                "[SE Fast Start] Warning: armor grid full after " .. (i - 1) ..
-                " roboport(s). Consider switching to mk2 armor for a larger grid."
-            )
-            break
+            if not built_in_armor_slot and new_stack.valid_for_read then
+                armor_inv[1].swap_stack(new_stack)
+                if was_wearing then
+                    player.print("[Fast Start 2] Your previous armor was moved to your inventory.")
+                end
+            end
         end
     end
 
-    -- Place exoskeletons last since they're lowest priority if space is tight.
-    for i = 1, exo_count do
-        if not grid.put({ name = "exoskeleton-equipment" }) then
-            player.print(
-                "[SE Fast Start] Warning: armor grid full after " .. (i - 1) ..
-                " exoskeleton(s). Consider switching to mk2 armor for a larger grid."
-            )
-            break
-        end
+    -- Bots go in after the armor so the armor's extra inventory slots exist.
+    -- The personal roboport equipment deploys bots from here once it's active.
+    if give_item(character, "construction-robot", bot_count) > 0 then
+        player.print("[Fast Start 2] " .. bot_count .. " construction robots added to inventory.")
     end
-
-    player.print(
-        "[SE Fast Start] " .. armor_name .. " equipped: fission reactor, " ..
-        robo_count .. " roboport(s), " .. exo_count .. " exoskeleton(s). " ..
-        bot_count .. " construction bots added to inventory."
-    )
 end
 
 
