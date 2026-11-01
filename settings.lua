@@ -1,4 +1,4 @@
--- SE Fast Start: settings.lua
+-- Fast Start 2: settings.lua
 -- All player-configurable options via the in-game Mod Settings menu.
 --
 -- Settings are all runtime-global, meaning they apply to the whole save and

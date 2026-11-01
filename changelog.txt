@@ -1,4 +1,29 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.3.0
+Date: 01. 11. 2026
+  Info:
+    - Updated for Factorio 2.1. This version no longer loads on Factorio 2.0; use 0.2.4 there.
+  Features:
+    - Added a setting for the number of portable fission reactors in the armor grid.
+  Changes:
+    - Default armor loadout now includes 2 portable fission reactors instead of 1.
+      One reactor makes only 500 kW under Space Exploration, which is not enough for an
+      exoskeleton plus bot recharging. Two still fit in mk1 power armor.
+    - Radar scan no longer freezes the game while the area generates. The map fills in over
+      a few seconds instead.
+    - If a player is already wearing armor when the kit arrives, that armor and its equipment
+      are moved to their inventory instead of being deleted.
+    - Chat messages are now translatable and use the "[Fast Start 2]" prefix.
+    - Armor summary message now reports the equipment that actually fit in the grid.
+  Bugfixes:
+    - Fixed a crash when the inventory was full and items had to be dropped on the ground.
+    - Fixed the kit not being delivered when the intro cutscene played to the end.
+    - Fixed a crash when another mod removes one of the kit's items. Missing items are now skipped.
+  Locale:
+    - Fixed the steam engine setting being labelled "Steam turbines".
+  Compatibility:
+    - Added AAI Industry as an optional dependency, since the burner turbine comes from it.
+---------------------------------------------------------------------------------------------------
 Version: 0.2.4
 Date: 20. 03. 2026
   Bugfixes:

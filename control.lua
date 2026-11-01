@@ -1,5 +1,5 @@
 -- =============================================================================
--- SE Fast Start: control.lua
+-- Fast Start 2: control.lua
 -- =============================================================================
 --
 -- This is the sole runtime script for the mod. Factorio's mod lifecycle has
@@ -26,6 +26,13 @@
 -- settings.global["sefs-enable-bots"].value).
 local function s(name)
     return settings.global["sefs-" .. name].value
+end
+
+-- Prints a chat message to the player, prefixed with "[Fast Start 2]". The
+-- text lives in locale/en/locale.cfg under [fast-start-2] so it can be
+-- translated; extra arguments fill the __1__, __2__, ... placeholders there.
+local function msg(player, key, ...)
+    player.print({ "", { "fast-start-2.prefix" }, " ", { "fast-start-2." .. key, ... } })
 end
 
 
@@ -98,7 +105,7 @@ local function do_radar_scan(player, character)
         { pos.x + radius, pos.y + radius }
     })
 
-    player.print("[Fast Start 2] Radar scan started - revealing a " .. radius .. " tile radius.")
+    msg(player, "radar-started", radius)
 end
 
 
@@ -127,11 +134,13 @@ local function do_inventory(player, character)
         { name = "fast-splitter",         count = s("count-fast-splitter")    },
 
         -- PIPES — needed for the steam power setup and oil processing early on.
-        { name = "pipe",                      count = s("count-pipe")            },
-        { name = "pipe-to-ground",            count = s("count-pipe-underground") },
+        { name = "pipe",                  count = s("count-pipe")             },
+        { name = "pipe-to-ground",        count = s("count-pipe-underground") },
 
         -- POWER INFRASTRUCTURE — enough to stand up a small steam plant
         -- immediately so the player isn't hand-mining coal for burner drills.
+        -- (The "count-steam-turbine" setting name is historical; it has always
+        -- controlled steam engines. Renaming it would reset users' settings.)
         { name = "medium-electric-pole",  count = s("count-medium-pole")      },
         { name = "boiler",                count = s("count-boiler")           },
         { name = "steam-engine",          count = s("count-steam-turbine")    },
@@ -149,12 +158,13 @@ local function do_inventory(player, character)
         { name = "assembling-machine-2",  count = s("count-assembler")        },
         { name = "fast-inserter",         count = s("count-fast-inserter")    },
         { name = "lab",                   count = s("count-lab")              },
+
         -- AAI INDUSTRY BOOTSTRAP — AAI Industry (required by Space Exploration,
         -- but also usable on its own) makes offshore pumps require electricity,
         -- creating a chicken-and-egg problem with steam power. The burner
         -- turbine generator needs no water and breaks the cycle. Give one to
         -- bootstrap the initial power setup, then tear it down once the steam
-        -- plant is running. give_item() silently skips it when AAI isn't loaded.
+        -- plant is running. give_item() skips it when AAI isn't loaded.
         { name = "burner-turbine",        count = 1                           },
     }
 
@@ -162,7 +172,7 @@ local function do_inventory(player, character)
         give_item(character, item.name, item.count)
     end
 
-    player.print("[SE Fast Start] Starting inventory delivered.")
+    msg(player, "inventory-delivered")
 end
 
 
@@ -236,10 +246,7 @@ local function do_bots(player, character)
     local main_inv  = character.get_main_inventory()
 
     if not prototypes.item[armor_name] then
-        player.print(
-            "[Fast Start 2] Warning: armor '" .. armor_name ..
-            "' not found. Check your armor tier setting. Armor skipped."
-        )
+        msg(player, "armor-missing", armor_name)
     elseif armor_inv and main_inv then
         -- Build the new armor in a free main-inventory slot, then swap it into
         -- the armor slot. Whatever the player was wearing ends up in that
@@ -254,12 +261,12 @@ local function do_bots(player, character)
         end
 
         if not new_stack then
-            player.print("[Fast Start 2] Warning: inventory full, so your current armor was kept. Armor skipped.")
+            msg(player, "armor-inventory-full")
         else
             new_stack.set_stack({ name = armor_name, count = 1 })
             local grid = new_stack.grid
             if not grid then
-                player.print("[Fast Start 2] Warning: armor '" .. armor_name .. "' has no equipment grid. Equipment skipped.")
+                msg(player, "armor-no-grid", prototypes.item[armor_name].localised_name)
             else
                 -- Reactors first (largest, and everything else needs power),
                 -- exoskeletons last since they matter least if space runs out.
@@ -267,23 +274,17 @@ local function do_bots(player, character)
                 local robos    = place_equipment(grid, "personal-roboport-equipment", robo_count)
                 local exos     = place_equipment(grid, "exoskeleton-equipment", exo_count)
 
-                player.print(
-                    "[Fast Start 2] " .. armor_name .. " equipped: " ..
-                    reactors .. " fission reactor(s), " .. robos .. " roboport(s), " ..
-                    exos .. " exoskeleton(s)."
-                )
+                msg(player, "armor-equipped",
+                    prototypes.item[armor_name].localised_name, reactors, robos, exos)
                 if reactors < reactor_count or robos < robo_count or exos < exo_count then
-                    player.print(
-                        "[Fast Start 2] Warning: not all equipment fit in the armor grid. " ..
-                        "Switch to power-armor-mk2 or lower the equipment counts."
-                    )
+                    msg(player, "armor-grid-full")
                 end
             end
 
             if not built_in_armor_slot and new_stack.valid_for_read then
                 armor_inv[1].swap_stack(new_stack)
                 if was_wearing then
-                    player.print("[Fast Start 2] Your previous armor was moved to your inventory.")
+                    msg(player, "armor-moved")
                 end
             end
         end
@@ -292,7 +293,7 @@ local function do_bots(player, character)
     -- Bots go in after the armor so the armor's extra inventory slots exist.
     -- The personal roboport equipment deploys bots from here once it's active.
     if give_item(character, "construction-robot", bot_count) > 0 then
-        player.print("[Fast Start 2] " .. bot_count .. " construction robots added to inventory.")
+        msg(player, "bots-added", bot_count)
     end
 end
 
