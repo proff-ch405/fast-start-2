@@ -88,6 +88,35 @@ There are a few older fast-start mods around, most of which are unmaintained and
 
 ---
 
+## Development
+
+### Test locally without zipping
+
+Link the repo into Factorio's mods folder (macOS path shown). The link must be named exactly `fast-start-2`:
+
+```bash
+ln -s ~/Dev/fast-start-2 "$HOME/Library/Application Support/factorio/mods/fast-start-2"
+```
+
+Remove any downloaded `fast-start-2_*.zip` from that folder first, or Factorio will see two copies. After editing, restart Factorio (or reload the save) to pick up changes.
+
+### Build a release zip
+
+```bash
+./build.sh
+```
+
+This writes `dist/fast-start-2_<version>.zip`, ready to upload to the mod portal. It packs the **last commit**, so commit your changes first. It refuses to build if `info.json` and the top `changelog.txt` entry have different versions.
+
+### API type-checking in Cursor
+
+1. Install the **Factorio Modding Tool Kit** extension (`justarandomgeek.factoriomod-debug`) and accept the Lua language server it recommends.
+2. Run **Factorio: Select Version** from the Command Palette and point it at your Factorio install.
+
+The editor will then underline calls that don't match the Factorio API, like wrong function arguments. The toolkit writes a machine-specific `.luarc.json`, which is ignored by git.
+
+---
+
 ## License
 
 MIT — see LICENSE file.

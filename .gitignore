@@ -7,5 +7,10 @@
 *.swp
 *~
 
-# Packaged Factorio mod releases
+# Lua language server config, generated per machine by the Factorio Modding Toolkit
+.luarc.json
+.emmyrc.json
+
+# Build output from build.sh
+dist/
 *.zip
